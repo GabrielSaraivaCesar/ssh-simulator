@@ -22,31 +22,36 @@ SSH Session:
 - The server responds to the 'ls' command with a fake list of files.
 - The client decrypts the response and verifies the HMAC. The hashed message must match with the received HMAC.
 """
-from rsa_simulator import generate_rsa_keys, encrypt, decrypt
 import random
 import hashlib
+import time
+from rsa_simulator import generate_rsa_keys, encrypt, decrypt
 
 # Step 1: Generate client and server keys with distinct primes
 CLIENT_PRIMES = (4583, 6833)
 SERVER_PRIMES = (2017, 7723)
-client_public_key, client_private_key = generate_rsa_keys(CLIENT_PRIMES)
-server_public_key, server_private_key = generate_rsa_keys(SERVER_PRIMES)
+CLIENT_PUBLIC_KEY, CLIENT_PRIVATE_KEY = generate_rsa_keys(CLIENT_PRIMES)
+SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = generate_rsa_keys(SERVER_PRIMES)
 
 # Mock list of files to send as a response to 'ls'
-FAKE_LIST_FILES = "file1.txt\nfile2.txt\ndirectory1/"
+FAKE_LIST_FILES = "    file1.txt\n    file2.txt\n    directory1/"
 
 # Diffie-Hellman parameters (shared publicly)
 BASE = 5
 MODULUS = 23  # A small prime number for example, but in practice this should be much larger
 
+def print_with_delay(message, delay=.3):
+    time.sleep(delay)
+    print('\n-----------------\n',message)
+
 def generate_challenge():
     return str(random.randint(1000, 9999))
 
 def client_sign_challenge(challenge):
-    return encrypt(challenge, client_private_key)
+    return encrypt(challenge, CLIENT_PRIVATE_KEY)
 
 def server_verify_signature(challenge, signature):
-    decrypted_challenge = decrypt(signature, client_public_key)
+    decrypted_challenge = decrypt(signature, CLIENT_PUBLIC_KEY)
     return decrypted_challenge == challenge
 
 def generate_diffie_hellman_key_pair():
@@ -68,7 +73,7 @@ def simple_hmac(message, session_key):
     return hashlib.sha256((message + str(session_key)).encode()).hexdigest()
 
 def ssh_handshake():
-    print("\n[SSH Handshake]")
+    print_with_delay("\n[SSH Handshake]")
 
     challenge = generate_challenge()
     print(f"Server: Challenge is '{challenge}'")
@@ -91,7 +96,7 @@ def diffie_hellman_key_exchange():
     # Server generates its DH key pair
     server_private_secret, server_public_value = generate_diffie_hellman_key_pair()
     # Server signs the DH public value
-    dh_signature = encrypt(str(server_public_value), server_private_key)
+    dh_signature = encrypt(str(server_public_value), SERVER_PRIVATE_KEY)
     print(f"Server: Generated DH public value {server_public_value} and signed it.")
 
     # Client generates its DH key pair
@@ -103,7 +108,7 @@ def diffie_hellman_key_exchange():
     
     # Client verifies server's DH public value
     print("\nClient: Verifying server's DH public value signature...")
-    decrypted_dh_value = decrypt(dh_signature, server_public_key)
+    decrypted_dh_value = decrypt(dh_signature, SERVER_PUBLIC_KEY)
     if decrypted_dh_value == str(server_public_value):
         print("Client: Signature of DH value is valid.")
     else:
@@ -123,7 +128,7 @@ def diffie_hellman_key_exchange():
     return server_shared_secret
 
 def ssh_session():
-    print("\n[SSH Session]")
+    print_with_delay("\n[SSH Session Start]")
 
     session_key = diffie_hellman_key_exchange()
     if session_key is None:
@@ -131,13 +136,13 @@ def ssh_session():
         return
 
     command = "ls"
-    print(f"\nClient: Sending command '{command}' encrypted with session key...")
+    print_with_delay(f"\nClient: Sending command '{command}' encrypted with session key...")
     encrypted_command = symmetric_encrypt(command, session_key)
     command_hmac = simple_hmac(command, session_key)
     print(f"Client: Encrypted command is '{encrypted_command}' with HMAC {command_hmac}")
 
     # Server decrypts the command and checks integrity with HMAC
-    print("\nServer: Decrypting the command and verifying HMAC...")
+    print_with_delay("\nServer: Decrypting the command and verifying HMAC...")
     received_command = symmetric_decrypt(encrypted_command, session_key)
     received_hmac = simple_hmac(received_command, session_key)
 
@@ -155,12 +160,12 @@ def ssh_session():
         print(f"Server: Encrypted response is '{encrypted_response}' with HMAC {response_hmac}")
 
         # Client decrypts the response and checks integrity
-        print("\nClient: Decrypting the response and verifying HMAC...")
+        print_with_delay("\nClient: Decrypting the response and verifying HMAC...")
         decrypted_response = symmetric_decrypt(encrypted_response, session_key)
         decrypted_response_hmac = simple_hmac(decrypted_response, session_key)
 
         if decrypted_response_hmac == response_hmac:
-            print(f"Client: HMAC is valid. Decrypted response is:\n{decrypted_response}")
+            print(f"Client: HMAC is valid. Decrypted response is:\n\n{decrypted_response}")
         else:
             print("Client: HMAC verification failed. Message integrity compromised.")
 
